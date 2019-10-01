@@ -2,3 +2,4 @@ jieba==0.39
 openpyxl
 nltk
 pyhanlp
+pandas

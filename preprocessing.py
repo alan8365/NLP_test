@@ -1,7 +1,9 @@
 import re
 from csv import DictReader
 from sqlite3 import connect
-from typing import Tuple, Iterable, Generator, List
+from typing import Tuple, Iterable, Generator, Any, Union
+from pandas import read_csv, DataFrame
+from pandas.io.parsers import TextFileReader
 
 
 def extract_image(content: str) -> Tuple[str, list]:
@@ -35,42 +37,6 @@ def dict_filter_to_tuple(it: Iterable, *keys: str) -> Generator:
         yield tuple(d[k] for k in d.keys() if k not in keys)
 
 
-"""
-post:{
-    id: int
-    title: str
-    content: str
-}
-
-img_url:{
-    post_id: int
-    url: str
-}
-
-post_tag:{
-    post_id: id
-    tag_content: str 
-}
-
-comment:{
-    comment_id: int
-    post_id: int
-    floor: int
-    content: str    
-}
-
-response_comment:{
-    comment_id: int
-    response_comment_id: int
-}
-
-top_response:{
-    post_id: int
-    comment_id: int
-}
-"""
-
-
 class Preprocess:
 
     def __init__(self, database_name: str):
@@ -80,6 +46,9 @@ class Preprocess:
         self.con = connect(self.database_name)
         self.cur = self.con.cursor()
         return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.con.close()
 
     def check_table_exist(self, table_name: str) -> bool:
         sql = f"""
@@ -91,7 +60,7 @@ class Preprocess:
         self.cur.execute(sql)
         return bool(self.cur.fetchall())
 
-    def check_database(self):
+    def check_database(self) -> None:
         sql_dict = {
             "post": """
                 create table post
@@ -124,7 +93,7 @@ class Preprocess:
                 );
             """,
             "comment": """
-                create table comment_dg_tmp
+                create table comment
                 (
                     id int
                         constraint comment_pk
@@ -170,55 +139,8 @@ class Preprocess:
                 self.cur.execute(sql)
                 self.con.commit()
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.con.close()
-
-
-def raw_comment_input(filename: str) -> None:
-    con = connect('ddcard_nutc.sqlite3')
-    cur = con.cursor()
-
-    table_name = f"pre_raw_comment"
-    sql = f"""
-        select name
-        from sqlite_master
-        where type='table' and name = '{table_name}'
-    """
-
-    cur.execute(sql)
-
-    if not cur.fetchall():
-        sql = f"""
-            create table {table_name}
-            (
-                id int
-                    constraint pre_raw_comment_pk
-                        primary key,
-                post_id int not null,
-                floor int not null,
-                content text not null,
-                like_count int
-            );
-        """
-
-        cur.execute(sql)
-        con.commit()
-
-    with open(f'raw_data/{filename}', encoding='utf-8-sig') as csv_file:
-        rows = DictReader(csv_file)
-        rows = dict_filter_to_tuple(rows, 'createdAt', 'updatedAt')
-        # rows = [tuple(row.values()) for row in rows]
-
-        sql = """
-            insert into pre_raw_comment
-                (post_id, floor, content, like_count)
-                values (?, ?, ?, ?);
-        """
-
-        cur.executemany(sql, rows)
-        con.commit()
-
-    con.close()
+    def comment_input(self, filename: str):
+        pass
 
 
 def data_parse(input_filename: str):
