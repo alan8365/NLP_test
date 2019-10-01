@@ -1,9 +1,7 @@
 import re
 from csv import DictReader
 from sqlite3 import connect
-from typing import Tuple, Iterable, Generator, Any, Union
-from pandas import read_csv, DataFrame
-from pandas.io.parsers import TextFileReader
+from typing import Tuple, Iterable, Generator, List
 
 
 def extract_image(content: str) -> Tuple[str, list]:
@@ -95,7 +93,7 @@ class Preprocess:
             "comment": """
                 create table comment
                 (
-                    id int
+                    id integer
                         constraint comment_pk
                             primary key autoincrement,
                     post_id int not null
@@ -135,9 +133,11 @@ class Preprocess:
 
         for key in sql_dict:
             if not self.check_table_exist(key):
+                print(f"table '{key}' does not exist, creating...")
                 sql = sql_dict[key]
                 self.cur.execute(sql)
                 self.con.commit()
+                print("done.")
 
     def comment_input(self, filename: str):
         pass
