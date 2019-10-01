@@ -1,2 +1,5 @@
-.idea/
+<<<<<<< HEAD
 .sqlite3
+.idea
+venv
+>>>>>>> origin/master
