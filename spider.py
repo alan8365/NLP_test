@@ -31,9 +31,12 @@ def get_dcard_post(post_id: int = None) -> DataFrame:
 def get_dcard_comment(post_id: int) -> DataFrame:
     url = f"https://www.dcard.tw/_api/posts/{post_id}/comments"
     json_content = requests.get(url, verify=False, headers=headers).content
-    df = read_json(json_content)
-    columns = ['id', 'postId', 'updatedAt', 'floor', 'content', 'likeCount']
-    return df[columns]
+    if json_content:
+        df = read_json(json_content)
+        columns = ['id', 'postId', 'updatedAt', 'floor', 'content', 'likeCount']
+        return df[columns]
+    else:
+        return DataFrame()
 
 
 def catch_all_data():
