@@ -2,6 +2,7 @@ import re
 from csv import DictReader
 from sqlite3 import connect
 from typing import Tuple, Iterable, Generator, List
+from pandas import DataFrame
 
 
 def extract_image(content: str) -> Tuple[str, list]:
@@ -13,10 +14,10 @@ def extract_image(content: str) -> Tuple[str, list]:
     return result, images
 
 
-def detag(tittle: str) -> Tuple[str, Tuple[str, ...]]:
+def detag(tittle: str) -> Tuple[str, List[str]]:
     pattern = r'#\w*'
     detag_compile = re.compile(pattern)
-    tags: Tuple[str, ...] = tuple(map(lambda s: s[1:], detag_compile.findall(tittle)))
+    tags = list(map(lambda s: s[1:], detag_compile.findall(tittle)))
     result = detag_compile.sub("", tittle).strip()
 
     if not result:
@@ -68,6 +69,7 @@ class Preprocess:
                             primary key,
                     title text not null,
                     content text not null,
+                    updated_at datetime not null,
                     comment_count int not null,
                     like_count int not null
                 );
@@ -101,8 +103,10 @@ class Preprocess:
                     post_id int not null
                         references post
                             on update cascade on delete cascade,
+                    update_at datetime not null ,
                     floor int not null,
-                    content text not null
+                    content text not null,
+                    like_count int not null
                 );
             """,
             "response_comment": """
@@ -135,14 +139,53 @@ class Preprocess:
 
         for key in sql_dict:
             if not self.check_table_exist(key):
-                print(f"table '{key}' does not exist, creating...")
+                print(f"table '{key}' does not exist, creating...", end="")
                 sql = sql_dict[key]
                 self.cur.execute(sql)
                 self.con.commit()
                 print("done.")
 
-    def comment_input(self, filename: str):
-        pass
+    def post_input(self, data: DataFrame):
+
+        print('start post input...', end='')
+
+        # post input
+        post_data = data.drop(columns='topics')
+        # 超過100字的內容歸零
+        post_data['content'] = post_data['content'].apply(lambda s: "" if len(s) > 100 else s)
+        post_data['title'] = post_data['title'].apply(lambda s: detag(s)[0])
+
+        post_data.to_sql('post', self.con, if_exists='append', index=False)
+
+        # post tag input
+        columns = ['id', 'topics']
+        tag_data = data.copy()
+        tag_data['topics'] = \
+            tag_data['topics'] + tag_data['title'].apply(lambda s: detag(s)[1])
+        tag_data = tag_data[columns]
+        tag_data = tag_data[tag_data['topics'].str.len() != 0]
+
+        tag_temp = []
+        for _, row in tag_data.iterrows():
+            # TODO 討論或實驗一下要不要把中科大留下來
+            tag_temp += [[row.id, topic] for topic in row.topics if topic != '中科大']
+
+        a = DataFrame(
+            data=tag_temp,
+            columns=['post_id', 'tag_content']
+        )
+
+        a.to_sql('post_tag', con=self.con, if_exists='append', index=False)
+
+        print('done')
+
+    def comment_input(self, data: DataFrame):
+
+        print('start comment input...', end='')
+
+
+
+        print('done')
 
 
 def data_parse(input_filename: str):
@@ -157,9 +200,4 @@ def data_parse(input_filename: str):
             like_count = row['likeCount']
             topic = row['topic']
 
-
 # raw_comment_input('dcard_nutc_comment_20190925_02.csv')
-
-
-with Preprocess("dcard.splite3") as p:
-    p.check_database()
