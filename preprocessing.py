@@ -67,7 +67,9 @@ class Preprocess:
                         constraint post_pk
                             primary key,
                     title text not null,
-                    content text not null
+                    content text not null,
+                    comment_count int not null,
+                    like_count int not null
                 );
             """,
             "img_url": """
@@ -95,7 +97,7 @@ class Preprocess:
                 (
                     id integer
                         constraint comment_pk
-                            primary key autoincrement,
+                            primary key,
                     post_id int not null
                         references post
                             on update cascade on delete cascade,
