@@ -16,11 +16,10 @@ headers = {
 urllib3.disable_warnings()
 
 
-def get_dcard_post(post_id: int = None) -> DataFrame:
+def get_dcard_post(post_id: int = None, limit=100) -> DataFrame:
+    url = f"https://www.dcard.tw/_api/forums/nutc/posts?popular=false&limit={limit}"
     if post_id:
-        url = f"https://www.dcard.tw/_api/forums/nutc/posts?popular=false&limit=100&before={post_id}"
-    else:
-        url = f"https://www.dcard.tw/_api/forums/nutc/posts?popular=false&limit=100"
+        url += f"&before={post_id}"
 
     json_content = requests.get(url, verify=False, headers=headers).content
     while not json_content:
@@ -67,26 +66,22 @@ def get_dcard_comment(post_id: int) -> DataFrame:
                                        'likeCount': 'like_count'})
 
 
-def catch_all_data():
+# first nutc post id = 21537
+def catch_all_post(until: int = 21537):
     all_post = DataFrame()
-    all_comment = DataFrame()
 
     df = get_dcard_post()
     while True:
         all_post = all_post.append(df)
 
-        if len(df) == 100:
-            last_id = df['id'][99]
+        if any(df['id'].isin([until])):
+            break
+        else:
+            last_id = df['id'].tail(1).values[0]
             df = get_dcard_post(last_id)
             print(last_id)
-        else:
-            break
 
-    for post_id in all_post['id']:
-        df = get_dcard_comment(post_id)
-        all_comment = all_comment.append(df)
-
-    return all_post, all_comment
+    return all_post
 
 
 def output_to_json(all_post: DataFrame, all_comment: DataFrame) -> None:

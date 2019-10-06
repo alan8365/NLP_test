@@ -3,4 +3,4 @@ openpyxl
 nltk
 pyhanlp
 pandas
-sqlalchemy
+sqlalchemy==1.3.9

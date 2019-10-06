@@ -3,8 +3,11 @@ from uuid import UUID
 
 from sqlite3 import connect, register_converter, register_adapter
 from typing import Tuple, Iterable, Generator, List
-from pandas import DataFrame
-# from sqlalchemy import create_engine, event
+from pandas import DataFrame, read_sql_table
+from sqlalchemy import create_engine, event
+
+
+# TODO 改天用sqlalchemy重寫
 
 
 def extract_image(content: str) -> Tuple[str, list]:
@@ -59,7 +62,7 @@ class Preprocess:
         self.con = connect(self.database_name)
         self.cur = self.con.cursor()
 
-        # self.con = create_engine(f'sqlite:///{os.getcwd()}\\{self.database_name}')
+        self.engine = create_engine(f'sqlite:///{self.database_name}')
 
         return self
 
@@ -163,7 +166,13 @@ class Preprocess:
                 self.cur.execute(sql)
                 self.con.commit()
 
-                print("done.")
+                print("done")
+
+    def get_post(self) -> DataFrame:
+
+        df = read_sql_table('post', self.engine)
+
+        return df
 
     def post_input(self, data: DataFrame) -> None:
 
@@ -227,10 +236,14 @@ class Preprocess:
         columns = ['post_id', 'id']
         top_comment_data = comment_data.join(floor)
         top_comment_data = top_comment_data[top_comment_data['source_comment_id'] == 0]
-        top_comment_data = top_comment_data.sort_values('like_count', ascending=False)
-        top_comment_data = top_comment_data[columns]
-        top_comment_data = top_comment_data.loc[:len(top_comment_data) // 10 - 1]
-        top_comment_data = top_comment_data.rename(columns={'id': 'comment_id'})
-        top_comment_data.to_sql('top_response', con=self.con, if_exists='append', index=False)
+
+        if not top_comment_data.empty:
+            top_comment_data = top_comment_data.sort_values('like_count', ascending=False)
+            top_comment_data = top_comment_data[columns]
+
+            top_response_length = len(top_comment_data) // 10
+            top_comment_data = top_comment_data.loc[:top_response_length]
+            top_comment_data = top_comment_data.rename(columns={'id': 'comment_id'})
+            top_comment_data.to_sql('top_response', con=self.con, if_exists='append', index=False)
 
         print('done')
