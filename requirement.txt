@@ -3,3 +3,4 @@ openpyxl
 nltk
 pyhanlp
 pandas
+sqlalchemy

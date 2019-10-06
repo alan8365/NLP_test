@@ -61,7 +61,9 @@ def get_dcard_comment(post_id: int) -> DataFrame:
         return df
 
     columns = ['id', 'postId', 'updatedAt', 'floor', 'content', 'likeCount']
+    df.updatedAt = to_datetime(df.updatedAt)
     return df[columns].rename(columns={'postId': 'post_id',
+                                       'updatedAt': 'updated_at',
                                        'likeCount': 'like_count'})
 
 

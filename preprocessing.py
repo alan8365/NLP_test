@@ -1,8 +1,10 @@
 import re
-from csv import DictReader
-from sqlite3 import connect
+from uuid import UUID
+
+from sqlite3 import connect, register_converter, register_adapter
 from typing import Tuple, Iterable, Generator, List
 from pandas import DataFrame
+# from sqlalchemy import create_engine, event
 
 
 def extract_image(content: str) -> Tuple[str, list]:
@@ -26,6 +28,15 @@ def detag(tittle: str) -> Tuple[str, List[str]]:
     return result, tags
 
 
+def defloor(content: str) -> Tuple[str, List[int]]:
+    pattern = r'B\d+'
+    defloor_compile = re.compile(pattern)
+    floor = list(map(lambda s: int(s[1:]), defloor_compile.findall(content)))
+    result = defloor_compile.sub("", content).strip()
+
+    return result, floor
+
+
 def dict_filter(it: Iterable, *keys: str) -> Generator:
     for d in it:
         yield dict((k, d[k]) for k in d.keys() if k not in keys)
@@ -42,8 +53,14 @@ class Preprocess:
         self.database_name = database_name
 
     def __enter__(self):
+        register_converter('GUID', lambda b: UUID(bytes_le=b))
+        register_adapter(UUID, lambda u: u.bytes_le)
+
         self.con = connect(self.database_name)
         self.cur = self.con.cursor()
+
+        # self.con = create_engine(f'sqlite:///{os.getcwd()}\\{self.database_name}')
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -97,13 +114,13 @@ class Preprocess:
             "comment": """
                 create table comment
                 (
-                    id integer
+                    id GUID
                         constraint comment_pk
                             primary key,
                     post_id int not null
                         references post
                             on update cascade on delete cascade,
-                    update_at datetime not null ,
+                    updated_at datetime not null ,
                     floor int not null,
                     content text not null,
                     like_count int not null
@@ -112,40 +129,43 @@ class Preprocess:
             "response_comment": """
                 create table response_comment
                 (
-                    comment_id int not null
-                        constraint response_comment_comment_id_fk
-                            references comment
-                                on update cascade on delete cascade,
-                    response_comment_id int
-                        constraint response_comment_comment_id_fk_2
-                            references comment
-                                on update cascade on delete cascade
+                    source_comment_id GUID not null
+                        references comment
+                            on update cascade on delete cascade,
+                    response_comment_id GUID
+                        references comment
+                            on update cascade on delete cascade,
+                    constraint response_comment_pk
+                        primary key (source_comment_id, response_comment_id)
                 );
             """,
             "top_response": """
                 create table top_response
                 (
                     post_id int
-                        constraint top_response_post_id_fk
-                            references post
-                                on update cascade on delete cascade,
-                    comment_id int
-                        constraint top_response_comment_id_fk
-                            references comment
-                                on update cascade on delete cascade
+                        references post
+                            on update cascade on delete cascade,
+                    comment_id GUID
+                        references comment
+                            on update cascade on delete cascade,
+                    constraint top_response_pk
+                        primary key (post_id, comment_id)
                 );
             """
         }
 
         for key in sql_dict:
+
             if not self.check_table_exist(key):
                 print(f"table '{key}' does not exist, creating...", end="")
+
                 sql = sql_dict[key]
                 self.cur.execute(sql)
                 self.con.commit()
+
                 print("done.")
 
-    def post_input(self, data: DataFrame):
+    def post_input(self, data: DataFrame) -> None:
 
         print('start post input...', end='')
 
@@ -170,34 +190,47 @@ class Preprocess:
             # TODO 討論或實驗一下要不要把中科大留下來
             tag_temp += [[row.id, topic] for topic in row.topics if topic != '中科大']
 
-        a = DataFrame(
+        tag_data = DataFrame(
             data=tag_temp,
             columns=['post_id', 'tag_content']
         )
 
-        a.to_sql('post_tag', con=self.con, if_exists='append', index=False)
+        tag_data.to_sql('post_tag', con=self.con, if_exists='append', index=False)
 
         print('done')
 
-    def comment_input(self, data: DataFrame):
+    def comment_input(self, data: DataFrame) -> None:
 
-        print('start comment input...', end='')
+        print(f'start {data["post_id"][0]} comment input...', end='')
 
+        # comment_input
+        comment_data = data.copy()
+        comment_data['content'] = data['content'].apply(lambda s: defloor(s)[0])
+        comment_data.to_sql('comment', con=self.con, if_exists='append', index=False)
 
+        # response_comment_input
+        columns = ['source_comment_id', 'response_comment_id']
+        floor_to_id = {row.floor: row.id for _, row in data.iterrows()}
+        floor_to_id.update({0: 0})
+
+        floor = data['content'].apply(lambda s: defloor(s)[1])
+        floor = floor.apply(lambda li: floor_to_id[li[0]] if len(li) == 1 else 0)
+        floor = floor.rename('source_comment_id')
+
+        res_comment_data = comment_data.join(floor)
+        res_comment_data = res_comment_data[res_comment_data['source_comment_id'] != 0]
+        res_comment_data = res_comment_data.rename(columns={'id': 'response_comment_id'})
+        res_comment_data = res_comment_data[columns]
+        res_comment_data.to_sql('response_comment', con=self.con, if_exists='append', index=False)
+
+        # top_comment_input
+        columns = ['post_id', 'id']
+        top_comment_data = comment_data.join(floor)
+        top_comment_data = top_comment_data[top_comment_data['source_comment_id'] == 0]
+        top_comment_data = top_comment_data.sort_values('like_count', ascending=False)
+        top_comment_data = top_comment_data[columns]
+        top_comment_data = top_comment_data.loc[:len(top_comment_data) // 10 - 1]
+        top_comment_data = top_comment_data.rename(columns={'id': 'comment_id'})
+        top_comment_data.to_sql('top_response', con=self.con, if_exists='append', index=False)
 
         print('done')
-
-
-def data_parse(input_filename: str):
-    with open(f'raw_data/{input_filename}', encoding='utf-8-sig') as csv_file:
-        rows = DictReader(csv_file)
-        rows = tuple(rows)[:100]
-
-        for row in rows:
-            post_id = row['id']
-            title, tags = detag(row['title'])
-            content, images = extract_image(row['content'])
-            like_count = row['likeCount']
-            topic = row['topic']
-
-# raw_comment_input('dcard_nutc_comment_20190925_02.csv')
