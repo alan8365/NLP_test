@@ -23,4 +23,5 @@ if __name__ == "__main__":
 
         for post_id in posts.id:
             comment_data = get_dcard_comment(post_id)
-            p.comment_input(comment_data)
+            if not comment_data.empty:
+                p.comment_input(comment_data)

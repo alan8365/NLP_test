@@ -223,6 +223,7 @@ class Preprocess:
         floor_to_id.update({0: 0})
 
         floor = data['content'].apply(lambda s: defloor(s)[1])
+        # TODO 把回被刪掉樓層的處理一下
         floor = floor.apply(lambda li: floor_to_id[li[0]] if len(li) == 1 else 0)
         floor = floor.rename('source_comment_id')
 
