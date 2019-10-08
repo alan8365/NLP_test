@@ -210,7 +210,7 @@ class Preprocess:
 
     def comment_input(self, data: DataFrame) -> None:
 
-        print(f'start {data["post_id"][0]} comment input...', end='')
+        print(f'start {data["post_id"].iloc[0]} comment input...', end='')
 
         # comment_input
         comment_data = data.copy()
@@ -242,7 +242,7 @@ class Preprocess:
             top_comment_data = top_comment_data[columns]
 
             top_response_length = len(top_comment_data) // 10
-            top_comment_data = top_comment_data.loc[:top_response_length]
+            top_comment_data = top_comment_data.iloc[:top_response_length]
             top_comment_data = top_comment_data.rename(columns={'id': 'comment_id'})
             top_comment_data.to_sql('top_response', con=self.con, if_exists='append', index=False)
 

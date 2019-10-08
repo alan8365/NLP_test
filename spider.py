@@ -49,7 +49,7 @@ def get_dcard_comment(post_id: int) -> DataFrame:
         time.sleep(1)
         json_content = requests.get(url, verify=False, headers=headers).content
 
-    if json_content == b'[]':
+    if json_content == b'[]' or b"error" in json_content:
         return DataFrame()
 
     df = read_json(json_content)
